@@ -37,7 +37,7 @@ from ..client import client, connection, connector
 from ..client._definitions import ApplicationStatus as ApplicationStatus
 from ..client._definitions import MachineStatus as MachineStatus
 from ..client._definitions import UnitStatus as UnitStatus
-from ..client.overrides import Caveat, Macaroon
+from ..client.overrides import Caveat, Delta, Macaroon
 from ..constraints import parse as parse_constraints
 from ..constraints import parse_storage_constraints
 from ..controller import ConnectedController, Controller
@@ -638,6 +638,111 @@ class CharmhubDeployType:
             origin=origin,
             is_bundle=is_bundle,
         )
+
+
+class PollingAllWatcher:
+    def __init__(self, client_facade, log):
+        self.client = client_facade
+        self.log = log
+        self.delta_queue = asyncio.Queue()
+        self.stop_event = asyncio.Event()
+        self.loop_task = None
+        self.seen_hashes = {}
+
+    async def Next(self):
+        if not self.loop_task:
+            self.loop_task = asyncio.create_task(self._poll_loop())
+        
+        return await self.delta_queue.get()
+
+    async def Stop(self):
+        self.stop_event.set()
+        if self.loop_task:
+            self.loop_task.cancel()
+            try:
+                await self.loop_task
+            except asyncio.CancelledError:
+                pass
+
+    async def _poll_loop(self):
+        while not self.stop_event.is_set():
+            try:
+                status = await self.client.FullStatus()
+                deltas = []
+                
+                # Helper to process entities
+                def process(entity_type, data, id_key=None):
+                    if not data: return
+                    # Serialize if needed
+                    if hasattr(data, 'serialize'):
+                        data = data.serialize()
+                    
+                    # Determine ID
+                    if id_key:
+                        obj_id = data.get(id_key)
+                    elif 'id' in data:
+                        obj_id = data['id']
+                    elif 'name' in data:
+                        obj_id = data['name']
+                    elif 'tag' in data:
+                        obj_id = data['tag']
+                    else:
+                        # Fallback for singletons like model
+                        obj_id = entity_type
+                    
+                    # Hash content to detect changes
+                    # We use JSON dump as hash
+                    import json
+                    # Sort keys for consistent hashing
+                    # Use default=str to handle non-serializable types if any
+                    content_hash = hash(json.dumps(data, sort_keys=True, default=str))
+                    
+                    key = f"{entity_type}:{obj_id}"
+                    if key not in self.seen_hashes or self.seen_hashes[key] != content_hash:
+                        self.seen_hashes[key] = content_hash
+                        deltas.append(Delta(entity=entity_type, type="change", data=data))
+
+                # Model
+                if status.model:
+                    process("model", status.model, "model-uuid")
+                
+                # Applications
+                if status.applications:
+                    for app_name, app in status.applications.items():
+                        data = app.serialize()
+                        data['name'] = app_name
+                        process("application", data, "name")
+                        
+                        # Units
+                        if app.units:
+                            for unit_name, unit in app.units.items():
+                                u_data = unit.serialize()
+                                u_data['name'] = unit_name
+                                u_data['application'] = app_name
+                                process("unit", u_data, "name")
+                
+                # Machines
+                if status.machines:
+                    for mach_id, mach in status.machines.items():
+                        m_data = mach.serialize()
+                        m_data['id'] = mach_id
+                        process("machine", m_data, "id")
+                        
+                # Relations
+                if status.relations:
+                    for rel in status.relations:
+                        r_data = rel.serialize()
+                        process("relation", r_data, "id")
+
+                if deltas:
+                    # Wrap in object with .deltas
+                    result = type('obj', (object,), {'deltas': deltas})
+                    await self.delta_queue.put(result)
+                
+                await asyncio.sleep(2)
+            except Exception as e:
+                self.log.warning(f"Polling watcher error: {e}")
+                await asyncio.sleep(5)
 
 
 class Model:
@@ -1342,15 +1447,33 @@ class Model:
                         pass
 
                 if not allwatcher:
-                    allwatcher = client.AllWatcherFacade.from_connection(
-                        self.connection()
+                    try:
+                        allwatcher = client.AllWatcherFacade.from_connection(
+                            self.connection()
+                        )
+                    except Exception:
+                        pass
+
+                if not allwatcher:
+                    # Fallback to polling
+                    log.info("No watcher facade found, using polling watcher")
+                    allwatcher = PollingAllWatcher(
+                        client.ClientFacade.from_connection(self.connection()), log
                     )
+
                 while not self._watch_stopping.is_set():
                     try:
                         results = await utils.run_with_interrupt(
                             allwatcher.Next(), self._watch_stopping, log=log
                         )
                     except JujuAPIError as e:
+                        if "WatchAll not implemented" in str(e) or "WatchAllModels not implemented" in str(e) or "facade \"AllModelWatcher\" not supported" in str(e):
+                            log.warning(f"Watcher failed ({e}), switching to polling")
+                            allwatcher = PollingAllWatcher(
+                                client.ClientFacade.from_connection(self.connection()), log
+                            )
+                            continue
+                        
                         if "watcher was stopped" not in str(e):
                             raise
                         if self._watch_stopping.is_set():

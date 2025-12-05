@@ -17,10 +17,14 @@ from juju.client import (
     _client17,
     _client19,
     _client20,
+    _client13,
+    _client22,
 )
 from juju.client._definitions import *
 
 CLIENTS = {
+    "22": _client22,
+    "13": _client13,
     "7": _client7,
     "3": _client3,
     "4": _client4,

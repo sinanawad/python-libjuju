@@ -603,7 +603,7 @@ async def rpc(self, msg):
 
 
 def build_methods(cls, capture):
-    properties = cls.schema["properties"]
+    properties = cls.schema.get("properties", {})
     for methodname in sorted(properties):
         method, source = _build_method(cls, methodname)
         setattr(cls, methodname, method)
@@ -632,7 +632,7 @@ def _build_method(cls, name):
 
 
 def build_watcher_methods(cls, capture):
-    properties = cls.schema["properties"]
+    properties = cls.schema.get("properties", {})
     if "Next" in properties and "Stop" in properties:
         method, source = make_rpc_func(cls)
         cls.rpc = method

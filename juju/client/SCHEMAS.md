@@ -43,3 +43,6 @@ Please see docs/CONTRIBUTING.md for the process for updating this file.
 
 # 3.6
 3.6.0
+
+# 4.0
+4.0.0
