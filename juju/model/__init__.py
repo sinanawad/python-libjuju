@@ -1320,7 +1320,19 @@ class Model:
                 self._mode = model_config["mode"]["value"]
 
             try:
-                allwatcher = client.AllWatcherFacade.from_connection(self.connection())
+                allwatcher = None
+                try:
+                    if hasattr(client, "AllModelWatcherFacade"):
+                        allwatcher = client.AllModelWatcherFacade.from_connection(
+                            self.connection()
+                        )
+                except Exception:
+                    pass
+
+                if not allwatcher:
+                    allwatcher = client.AllWatcherFacade.from_connection(
+                        self.connection()
+                    )
                 while not self._watch_stopping.is_set():
                     try:
                         results = await utils.run_with_interrupt(

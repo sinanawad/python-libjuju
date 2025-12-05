@@ -6,8 +6,42 @@ from . import model
 from .client import client, overrides
 
 
+def infer_entity_type(data):
+    if "model-uuid" in data:
+        return "model"
+    if "charm-url" in data:
+        return "charm"
+    if "application-name" in data:
+        return "applicationOffer"
+    if "tag" in data:
+        return "annotation"
+    if "name" in data:
+        if "/" in data["name"]:
+            return "unit"
+        if "offer-url" in data:
+            return "remoteApplication"
+        return "application"
+    if "id" in data:
+        if "message" in data and "status" in data:
+            return "action"
+        if "endpoints" in data:
+            return "relation"
+        return "machine"
+    return "unknown"
+
+
 def get_entity_delta(d: overrides.Delta):
-    return _delta_types[d.entity](d.deltas)
+    if d.deltas:
+        return _delta_types[d.entity](d.deltas)
+
+    entity_type = d.entity
+    if entity_type == "unknown":
+        entity_type = infer_entity_type(d.data)
+
+    if entity_type not in _delta_types:
+        raise KeyError(entity_type)
+
+    return _delta_types[entity_type](entity=d.data, removed=d.removed)
 
 
 def get_entity_class(entity_type):

@@ -19,6 +19,7 @@ __all__ = [
 __patches__ = [
     "ResourcesFacade",
     "AllWatcherFacade",
+    "AllModelWatcherFacade",
     "ActionFacade",
 ]
 
@@ -46,22 +47,27 @@ class Delta(Type):
 
     """
 
-    _toSchema = {"deltas": "deltas"}
-    _toPy = {"deltas": "deltas"}
+    _toSchema = {"deltas": "deltas", "entity": "entity", "removed": "removed"}
+    _toPy = {"deltas": "deltas", "entity": "entity", "removed": "removed"}
 
-    def __init__(self, deltas: tuple[str, str, dict[str, Any]]):
+    def __init__(self, deltas=None, entity=None, removed=None, **unknown_fields):
         """:param deltas: [str, str, object]"""
-        self.deltas = deltas
-
-        change = _Change(*self.deltas)
-
-        self.entity = change.entity
-        self.type = change.type
-        self.data = change.data
+        if deltas:
+            self.deltas = deltas
+            change = _Change(*self.deltas)
+            self.entity = change.entity
+            self.type = change.type
+            self.data = change.data
+        else:
+            self.deltas = None
+            self.removed = removed
+            self.data = entity
+            self.type = "remove" if removed else "change"
+            self.entity = "unknown"
 
     @classmethod
     def from_json(cls, data):
-        return cls(deltas=data)
+        return cls(deltas=data) if isinstance(data, list) else super().from_json(data)
 
 
 class ResourcesFacade(Type):
@@ -104,6 +110,21 @@ class ResourcesFacade(Type):
 
 class AllWatcherFacade(Type):
     """Patch rpc method of allwatcher to add in 'id' stuff."""
+
+    async def rpc(self, msg):
+        if not hasattr(self, "Id"):
+            client = _client.ClientFacade.from_connection(self.connection)
+
+            result = await client.WatchAll()
+            self.Id = result.watcher_id
+
+        msg["Id"] = self.Id
+        result = await self.connection.rpc(msg, encoder=TypeEncoder)
+        return result
+
+
+class AllModelWatcherFacade(Type):
+    """Patch rpc method of allmodelwatcher to add in 'id' stuff."""
 
     async def rpc(self, msg):
         if not hasattr(self, "Id"):
