@@ -1330,6 +1330,18 @@ class Model:
                     pass
 
                 if not allwatcher:
+                    # Juju 4.0 compatibility: AllModelWatcher might not be listed in facades
+                    # but is required. If AllWatcher is also missing (which is checked below),
+                    # we try to force-load AllModelWatcher from _client4.
+                    try:
+                        from juju.client import _client4
+
+                        allwatcher = _client4.AllModelWatcherFacade()
+                        allwatcher.connect(self.connection())
+                    except Exception:
+                        pass
+
+                if not allwatcher:
                     allwatcher = client.AllWatcherFacade.from_connection(
                         self.connection()
                     )

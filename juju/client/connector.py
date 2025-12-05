@@ -121,9 +121,11 @@ class Connector:
         client_version = version.parse(CLIENT_VERSION)
 
         if juju_server_version.major != client_version.major:
-            raise JujuConnectionError(
-                "juju server-version %s not supported" % juju_server_version
-            )
+            # Allow Juju 4 if client is 3 (forward compatibility mode for this library update)
+            if not (client_version.major == 3 and juju_server_version.major == 4):
+                raise JujuConnectionError(
+                    "juju server-version %s not supported" % juju_server_version
+                )
 
     async def disconnect(self, entity):
         """Shut down the watcher task and close websockets."""
