@@ -243,7 +243,7 @@ class Number(_definitions.Number):
         return self.serialize()
 
 
-class Binary(_definitions.Binary):
+class Binary(Type):
     """Represent a semver string with additional series and arch info.
 
     Because it is not standard JSON, the typical from_json parsing fails and

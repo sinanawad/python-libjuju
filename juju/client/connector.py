@@ -120,7 +120,7 @@ class Connector:
         # CLIENT_VERSION statically comes from the VERSION file in the repo
         client_version = version.parse(CLIENT_VERSION)
 
-        if juju_server_version.major != client_version.major:
+        if juju_server_version.major != client_version.major and juju_server_version.major != 4:
             raise JujuConnectionError(
                 "juju server-version %s not supported" % juju_server_version
             )

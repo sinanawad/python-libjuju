@@ -66,6 +66,7 @@ from ..tag import application as application_tag
 from ..url import URL, Schema
 from ..version import DEFAULT_ARCHITECTURE
 from . import _idle
+from .state_updater import AllWatcherUpdater, PollingUpdater
 
 if TYPE_CHECKING:
     from ..application import Application
@@ -674,10 +675,8 @@ class Model:
         self.state = ModelState(self)
         self._info = None
         self._mode = None
-        self._watch_stopping = asyncio.Event()
-        self._watch_stopped = asyncio.Event()
+        self._updater = None
         self._watch_received = asyncio.Event()
-        self._watch_stopped.set()
 
         self._charmhub = CharmHub(self)
 
@@ -838,6 +837,8 @@ class Model:
         await self._after_connect(model_uuid=uuid)
 
     async def _after_connect(self, model_name=None, model_uuid=None):
+        if model_uuid:
+            self.uuid = model_uuid
         self._watch()
 
         # Wait for the first packet of data from the AllWatcher,
@@ -859,17 +860,17 @@ class Model:
         # (and raise) an exception coming from the _all_watcher
         # Otherwise (i.e. _watch_received is set), then we're good to go
         done, _pending = await asyncio.wait(
-            [waiter, self._watcher_task], return_when=asyncio.FIRST_COMPLETED
+            [waiter, self._updater.task], return_when=asyncio.FIRST_COMPLETED
         )
-        if self._watcher_task in done:
+        if self._updater.task in done:
             # Cancel the _watch_received.wait
             waiter.cancel()
             # If there's no exception, then why did the _all_watcher broke its loop?
-            if not self._watcher_task.exception():
+            if not self._updater.task.exception():
                 raise JujuError(
                     "AllWatcher task is finished abruptly without an exception."
                 )
-            raise self._watcher_task.exception()
+            raise self._updater.task.exception()
 
         if self._info is None:
             # TODO (cderici): See if this can be optimized away, or at least
@@ -884,17 +885,8 @@ class Model:
 
     async def disconnect(self):
         """Shut down the watcher task and close websockets."""
-        if not self._watch_stopped.is_set():
-            log.debug("Stopping watcher task")
-            self._watch_stopping.set()
-            # If the _all_watcher task is finished,
-            # check to see an exception, if yes, raise,
-            # otherwise we should see the _watch_stopped
-            # flag is set
-            if self._watcher_task.done() and self._watcher_task.exception():
-                raise self._watcher_task.exception()
-            await self._watch_stopped.wait()
-            self._watch_stopping.clear()
+        if self._updater:
+            await self._updater.stop()
 
         if self.is_connected():
             await self._connector.disconnect(entity="model")
@@ -1303,98 +1295,13 @@ class Model:
         See :meth:`add_observer` to register an onchange callback.
 
         """
+        if self.connection().is_juju4:
+            self._updater = PollingUpdater(self)
+        else:
+            self._updater = AllWatcherUpdater(self)
 
-        def _post_step(obj):
-            # Once we get the model, ensure we're running in the correct state
-            # as a post step.
-            if isinstance(obj, ModelInfo) and obj.safe_data is not None:
-                model_config = obj.safe_data["config"]
-                if "mode" in model_config:
-                    self._mode = model_config["mode"]
-
-        async def _all_watcher():
-            # First attempt to get the model config so we know what mode the
-            # library should be running in.
-            model_config = await self.get_config()
-            if "mode" in model_config:
-                self._mode = model_config["mode"]["value"]
-
-            try:
-                allwatcher = client.AllWatcherFacade.from_connection(self.connection())
-                while not self._watch_stopping.is_set():
-                    try:
-                        results = await utils.run_with_interrupt(
-                            allwatcher.Next(), self._watch_stopping, log=log
-                        )
-                    except JujuAPIError as e:
-                        if "watcher was stopped" not in str(e):
-                            raise
-                        if self._watch_stopping.is_set():
-                            # this shouldn't ever actually happen, because
-                            # the event should trigger before the controller
-                            # has a chance to tell us the watcher is stopped
-                            # but handle it gracefully, just in case
-                            break
-                        # controller stopped our watcher for some reason
-                        # but we're not actually stopping, so just restart it
-                        log.warning("Watcher: watcher stopped, restarting")
-                        del allwatcher.Id
-                        continue
-                    except websockets.ConnectionClosed:
-                        if self.connection().monitor.status == connection.Monitor.ERROR:
-                            # closed unexpectedly, try to reopen
-                            log.warning("Watcher: connection closed, reopening")
-                            await self.connection().reconnect()
-                            if (
-                                self.connection().monitor.status
-                                != connection.Monitor.CONNECTED
-                            ):
-                                # reconnect failed; abort and shutdown
-                                log.error(
-                                    "Watcher: automatic reconnect "
-                                    "failed; stopping watcher"
-                                )
-                                break
-                            del allwatcher.Id
-                            continue
-                        else:
-                            # closed on request, go ahead and shutdown
-                            break
-                    if self._watch_stopping.is_set():
-                        try:
-                            await allwatcher.Stop()
-                        except websockets.ConnectionClosed:
-                            pass  # can't stop on a closed conn
-                        break
-                    for delta in results.deltas:
-                        entity = None
-                        try:
-                            entity = get_entity_delta(delta)
-                        except KeyError:
-                            if self.strict_mode:
-                                raise JujuError(f"unknown delta type '{delta.entity}'")
-
-                        if not self.strict_mode and entity is None:
-                            continue
-                        old_obj, new_obj = self.state.apply_delta(entity)
-                        await self._notify_observers(entity, old_obj, new_obj)
-                        # Post step ensure that we can handle any settings
-                        # that need to be correctly set as a post step.
-                        _post_step(new_obj)
-                    self._watch_received.set()
-            except CancelledError:
-                pass
-            except Exception:
-                log.exception("Error in watcher")
-                raise
-            finally:
-                self._watch_stopped.set()
-
-        log.debug("Starting watcher task")
         self._watch_received.clear()
-        self._watch_stopping.clear()
-        self._watch_stopped.clear()
-        self._watcher_task = asyncio.create_task(_all_watcher())
+        self._updater.start()
 
     async def _notify_observers(self, delta, old_obj, new_obj):
         """Call observing callbacks, notifying them of a change in model state

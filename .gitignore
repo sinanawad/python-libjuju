@@ -17,3 +17,9 @@ deb_dist
 *.tar.gz
 .idea/
 build/
+
+# Added by Speckit
+venv/
+.coverage
+htmlcov/
+*.log

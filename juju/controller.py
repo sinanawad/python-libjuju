@@ -362,18 +362,32 @@ class Controller:
 
         log.debug("Creating model %s", model_name)
 
-        if not config or "authorized-keys" not in config:
-            config = config or {}
-            config["authorized-keys"] = await utils.read_ssh_key()
+        # Check if Juju 4
+        is_juju4 = False
+        try:
+            if self.connection().info["server-version"].startswith("4."):
+                is_juju4 = True
+        except (KeyError, AttributeError):
+            pass
 
-        model_info = await model_facade.CreateModel(
-            cloud_tag=tag.cloud(cloud_name),
-            config=config,
-            credential=credential,
-            name=model_name,
-            owner_tag=owner,
-            region=region,
-        )
+        if not config or "authorized-keys" not in config:
+            if not is_juju4:
+                config = config or {}
+                config["authorized-keys"] = await utils.read_ssh_key()
+
+        kwargs = {
+            "cloud_tag": tag.cloud(cloud_name),
+            "config": config,
+            "credential": credential,
+            "name": model_name,
+            "region": region,
+        }
+        if not is_juju4:
+            kwargs["owner_tag"] = owner
+        else:
+            kwargs["qualifier"] = owner
+
+        model_info = await model_facade.CreateModel(**kwargs)
         from juju.model import Model
 
         model = Model(jujudata=self._connector.jujudata)

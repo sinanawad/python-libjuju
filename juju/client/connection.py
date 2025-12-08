@@ -291,6 +291,18 @@ class Connection:
         return self.info["server-version"].startswith("2.")
 
     @property
+    def is_juju3(self):
+        if self.info is None:
+            raise errors.JujuError("Not connected yet.")
+        return self.info["server-version"].startswith("3.")
+
+    @property
+    def is_juju4(self):
+        if self.info is None:
+            raise errors.JujuError("Not connected yet.")
+        return self.info["server-version"].startswith("4.")
+
+    @property
     def is_open(self):
         return self.monitor.status == Monitor.CONNECTED
 
