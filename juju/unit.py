@@ -16,13 +16,20 @@ log = logging.getLogger(__name__)
 
 class Unit(model.ModelEntity):
     @property
+    def application(self):
+        """Get the application name."""
+        return self.name.split("/")[0]
+    @property
     def name(self) -> str:
         return self.entity_id
 
     @property
     def agent_status(self):
         """Returns the current agent status string."""
-        return self.safe_data["agent-status"]["current"]
+        status_obj = self.safe_data["agent-status"]
+        if hasattr(status_obj, "status"):
+            return status_obj.status
+        return status_obj["current"]
 
     @property
     def agent_status_since(self):
@@ -44,12 +51,18 @@ class Unit(model.ModelEntity):
     @property
     def agent_status_message(self):
         """Get the agent status message."""
-        return self.safe_data["agent-status"]["message"]
+        status_obj = self.safe_data["agent-status"]
+        if hasattr(status_obj, "info"):
+            return status_obj.info
+        return status_obj["message"]
 
     @property
     def workload_status(self):
         """Returns the current workload status string."""
-        return self.safe_data["workload-status"]["current"]
+        status_obj = self.safe_data["workload-status"]
+        if hasattr(status_obj, "status"):
+            return status_obj.status
+        return status_obj["current"]
 
     @property
     def workload_status_since(self):
@@ -59,12 +72,15 @@ class Unit(model.ModelEntity):
     @property
     def workload_status_message(self):
         """Get the workload status message."""
-        return self.safe_data["workload-status"]["message"]
+        status_obj = self.safe_data["workload-status"]
+        if hasattr(status_obj, "info"):
+            return status_obj.info
+        return status_obj["message"]
 
     @property
     def machine(self):
         """Get the machine object for this unit."""
-        machine_id = self.safe_data["machine-id"]
+        machine_id = self.safe_data.get("machine-id")
         if machine_id:
             return self.model.machines.get(machine_id, None)
         else:

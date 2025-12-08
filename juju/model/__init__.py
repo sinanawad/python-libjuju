@@ -937,18 +937,100 @@ class Model:
            instead.
 
         """
+        import requests
+        import urllib3
+        urllib3.disable_warnings()
+        
         conn, headers, path_prefix = self.connection().https_connection()
-        path = "%s/charms?series=%s" % (path_prefix, series)
+        uuid = self.connection().uuid
+        host = conn.host
+        if ":" in host and not host.startswith("["):
+            host = f"[{host}]"
+        base_url = f"https://{host}:{conn.port}"
+        cookies = self.connection().bakery_client.cookies
+
+        # Try Juju 4+ PUT method first
+        try:
+            if hasattr(charm_file, "seek"):
+                charm_file.seek(0)
+            
+            # Calculate SHA256
+            sha256_hash = hashlib.sha256()
+            for byte_block in iter(lambda: charm_file.read(4096), b""):
+                sha256_hash.update(byte_block)
+            sha256 = sha256_hash.hexdigest()
+            
+            if hasattr(charm_file, "seek"):
+                charm_file.seek(0)
+            
+            charm_name = None
+            try:
+                zf = zipfile.ZipFile(charm_file)
+                if "metadata.yaml" in zf.namelist():
+                    metadata = yaml.safe_load(zf.read("metadata.yaml"))
+                    charm_name = metadata["name"]
+                elif "charmcraft.yaml" in zf.namelist():
+                    metadata = yaml.safe_load(zf.read("charmcraft.yaml"))
+                    charm_name = metadata["name"]
+            except Exception:
+                pass
+
+            if charm_name:
+                # /model-<uuid>/charms/<name>-<sha256[:7]>
+                url = f"{base_url}/model-{uuid}/charms/{charm_name}-{sha256[:7]}"
+                put_headers = headers.copy()
+                put_headers["Content-Type"] = "application/zip"
+                put_headers["Juju-Curl"] = f"local:{charm_name}"
+                put_headers["Juju-Charm-Url"] = f"local:{charm_name}"
+                
+                if hasattr(charm_file, "seek"):
+                    charm_file.seek(0)
+                
+                response = requests.put(url, headers=put_headers, data=charm_file, verify=False, cookies=cookies)
+                if response.status_code == 200:
+                    return response.json()["charm-url"]
+        except Exception:
+            pass
+
+        # Fallback to legacy POST method
+        if series is None:
+            series = ""
+
+        base_val = series
+        if series == "jammy":
+            base_val = "ubuntu@22.04"
+        elif series == "focal":
+            base_val = "ubuntu@20.04"
+        elif series == "noble":
+            base_val = "ubuntu@24.04"
+            
+        paths_to_try = [
+            f"/model/{uuid}/charms?base={base_val}",
+            f"/models/{uuid}/charms?base={base_val}",
+            f"/api/v4/model/{uuid}/charms?base={base_val}",
+            f"/api/v4/models/{uuid}/charms?base={base_val}",
+            f"/charms?base={base_val}",
+            f"/model/{uuid}/charms?series={series}",
+            f"/models/{uuid}/charms?series={series}",
+            f"/api/v4/model/{uuid}/charms?series={series}",
+            f"/api/v4/models/{uuid}/charms?series={series}",
+            f"/charms?series={series}",
+        ]
+
         headers["Content-Type"] = "application/zip"
-        if size:
-            headers["Content-Length"] = size
-        conn.request("POST", path, charm_file, headers)
-        response = conn.getresponse()
-        result = response.read().decode()
-        if not response.status == 200:
-            raise JujuError(result)
-        result = json.loads(result)
-        return result["charm-url"]
+        
+        for path in paths_to_try:
+            url = f"{base_url}{path}"
+            try:
+                if hasattr(charm_file, "seek"):
+                    charm_file.seek(0)
+                response = requests.post(url, headers=headers, data=charm_file, verify=False, cookies=cookies)
+                if response.status_code == 200:
+                    return response.json()["charm-url"]
+            except Exception:
+                pass
+        
+        raise JujuError(f"All upload attempts failed")
 
     def all_units_idle(self):
         """Return True if all units are idle."""
@@ -1893,6 +1975,11 @@ class Model:
                         f"charm at {charm_dir}. "
                     )
 
+                if base and not charm_series:
+                    try:
+                        charm_series = f"{base.name}@{base.channel}"
+                    except AttributeError:
+                        pass
                 identifier = await self.add_local_charm_dir(charm_dir, charm_series)
                 resources = await self.add_local_resources(
                     application_name, identifier, metadata, resources=resources

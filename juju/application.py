@@ -138,7 +138,11 @@ class Application(model.ModelEntity):
         If the application is unknown it will attempt to derive the unit
         workload status and highlight the most relevant (severity).
         """
-        status = self.safe_data["status"]["current"]
+        status_obj = self.safe_data["status"]
+        if hasattr(status_obj, "status"):
+            status = status_obj.status
+        else:
+            status = status_obj["current"]
         if status == "unset":
             known_statuses = [unit.workload_status for unit in self.units]
             # If the self.get_status() is called (i.e. the status
@@ -152,7 +156,10 @@ class Application(model.ModelEntity):
     @property
     def status_message(self):
         """Get the application status message, as set by the charm's leader."""
-        return self.safe_data["status"]["message"]
+        status_obj = self.safe_data["status"]
+        if hasattr(status_obj, "info"):
+            return status_obj.info
+        return status_obj["message"]
 
     @property
     def tag(self):
