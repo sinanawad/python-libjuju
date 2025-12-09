@@ -79,6 +79,10 @@ class CleanModel:
         model_name = f"test-{test_run_nonce}-{test_name}-{model_nonce}"
         self._model = await self._controller.add_model(model_name)
 
+        # Set model constraints to use VMs only (not containers)
+        # This prevents hangs on LXD that only supports VM placement
+        await self._model.set_constraints({"virt_type": "virtual-machine"})
+
         # Change the JujuData instance so that it will return the new
         # model as the current model name, so that we'll connect
         # to it by default.

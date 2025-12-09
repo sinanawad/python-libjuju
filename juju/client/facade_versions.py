@@ -17,7 +17,7 @@ client_facade_versions = {
     "Backups": (3,),
     "Block": (2,),
     "Bundle": (6, 8),
-    "Charms": (6,),
+    "Charms": (6, 7),
     "Client": (6, 7, 8),
     "Cloud": (7,),
     "Controller": (11, 12, 13),
@@ -45,7 +45,7 @@ client_facade_versions = {
 }
 
 # Manual list of facades present in schemas + codegen which python-libjuju does not yet support
-excluded_facade_versions: Dict[str, Sequence[int]] = {"Charms": (7,)}
+excluded_facade_versions: Dict[str, Sequence[int]] = {}
 
 
 # We don't generate code for these, as we can never use them.

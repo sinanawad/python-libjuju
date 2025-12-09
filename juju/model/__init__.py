@@ -2644,7 +2644,10 @@ class Model:
 
         facade = facade_cls.from_connection(self.connection())
 
-        await facade.SetModelConstraints(application="", constraints=constraints)
+        # Convert dict constraints to Value object (required by the API)
+        constraints_value = client.Value.from_json(constraints) if constraints else None
+
+        await facade.SetModelConstraints(application="", constraints=constraints_value)
 
     async def get_action_output(self, action_uuid, wait=None):
         """Get the results of an action by ID.
