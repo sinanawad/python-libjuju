@@ -1,6 +1,11 @@
 name: Testing
 
-on: [push, pull_request, workflow_dispatch]
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - 001-juju4-adaptation
+
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
