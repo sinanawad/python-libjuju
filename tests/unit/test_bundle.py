@@ -35,8 +35,8 @@ class TestChangeSet(unittest.TestCase):
         self.assertEqual(len(result), 0)
 
     def test_sort_changes(self):
-        a = client.BundleChange(id_="a", requires=["b"])
-        b = client.BundleChange(id_="b", requires=[])
+        a = client.BundleChangesMapArgs(id_="a", requires=["b"])
+        b = client.BundleChangesMapArgs(id_="b", requires=[])
 
         changeset = ChangeSet([a, b])
         result = changeset.sorted()
@@ -45,12 +45,12 @@ class TestChangeSet(unittest.TestCase):
         self.assertEqual(result, [b, a])
 
     def test_sort_complex_changes(self):
-        a = client.BundleChange(id_="a", requires=[])
-        b = client.BundleChange(id_="b", requires=["b"])
-        c = client.BundleChange(id_="c", requires=["a", "d"])
-        d = client.BundleChange(id_="d", requires=["a"])
-        e = client.BundleChange(id_="e", requires=["a", "d", "c", "b"])
-        f = client.BundleChange(id_="f", requires=["e", "d", "c"])
+        a = client.BundleChangesMapArgs(id_="a", requires=[])
+        b = client.BundleChangesMapArgs(id_="b", requires=["b"])
+        c = client.BundleChangesMapArgs(id_="c", requires=["a", "d"])
+        d = client.BundleChangesMapArgs(id_="d", requires=["a"])
+        e = client.BundleChangesMapArgs(id_="e", requires=["a", "d", "c", "b"])
+        f = client.BundleChangesMapArgs(id_="f", requires=["e", "d", "c"])
 
         changeset = ChangeSet([a, b, c, d, e, f])
         result = changeset.sorted()
@@ -59,8 +59,8 @@ class TestChangeSet(unittest.TestCase):
         self.assertEqual(result, [a, b, d, c, e, f])
 
     def test_sort_causes_circular_error(self):
-        a = client.BundleChange(id_="a", requires=["b"])
-        b = client.BundleChange(id_="b", requires=["a"])
+        a = client.BundleChangesMapArgs(id_="a", requires=["b"])
+        b = client.BundleChangesMapArgs(id_="b", requires=["a"])
 
         changeset = ChangeSet([a, b])
         self.assertRaises(CircularDependencyError, changeset.sorted)

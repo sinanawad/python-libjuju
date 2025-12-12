@@ -4,21 +4,27 @@
 from juju.client._definitions import *
 
 
-from juju.client import _client7, _client3, _client2, _client22, _client6, _client8, _client13, _client1, _client11, _client4, _client5
+from juju.client import _client1, _client2, _client3, _client4, _client5, _client6, _client7, _client8, _client9, _client10, _client11, _client12, _client13, _client17, _client19, _client20, _client22
 
 
 CLIENTS = {
-    "7": _client7,
-    "3": _client3,
-    "2": _client2,
-    "22": _client22,
-    "6": _client6,
-    "8": _client8,
-    "13": _client13,
     "1": _client1,
-    "11": _client11,
+    "2": _client2,
+    "3": _client3,
     "4": _client4,
-    "5": _client5
+    "5": _client5,
+    "6": _client6,
+    "7": _client7,
+    "8": _client8,
+    "9": _client9,
+    "10": _client10,
+    "11": _client11,
+    "12": _client12,
+    "13": _client13,
+    "17": _client17,
+    "19": _client19,
+    "20": _client20,
+    "22": _client22,
 }
 
 

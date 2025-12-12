@@ -256,6 +256,9 @@ class Binary(Type):
         r"^(\d{1,9})\.(\d{1,9})(?:\.|-([a-z]+))(\d{1,9})(\.\d{1,9})?-([^-]+)-([^-]+)$"
     )
 
+    _toSchema = {"number": "number", "series": "series", "arch": "arch"}
+    _toPy = {"number": "number", "series": "series", "arch": "arch"}
+
     def __init__(self, number=None, series=None, arch=None, **unknown_fields):
         """Number : Number
         series : str

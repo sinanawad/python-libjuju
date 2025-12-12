@@ -14923,3 +14923,25 @@ class ZoneResults(Type):
         self.unknown_fields = unknown_fields
 
 
+
+class UpgradeSeriesUnitsResults(Type):
+    _toSchema = {'units': 'units'}
+    _toPy = {'units': 'units'}
+    def __init__(self, units=None, **unknown_fields):
+        self.units = units
+        self.unknown_fields = unknown_fields
+
+class NotifyWatchResults(Type):
+    _toSchema = {'notify_watcher_id': 'NotifyWatcherId', 'error': 'Error'}
+    _toPy = {'NotifyWatcherId': 'notify_watcher_id', 'Error': 'error'}
+    def __init__(self, notify_watcher_id=None, error=None, **unknown_fields):
+        self.notify_watcher_id = notify_watcher_id
+        self.error = error
+        self.unknown_fields = unknown_fields
+
+class CloudSpecResults(Type):
+    _toSchema = {'results': 'results'}
+    _toPy = {'results': 'results'}
+    def __init__(self, results=None, **unknown_fields):
+        self.results = results
+        self.unknown_fields = unknown_fields
