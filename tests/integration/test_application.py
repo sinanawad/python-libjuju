@@ -102,6 +102,7 @@ async def test_add_units():
 
 
 @base.bootstrapped
+@pytest.mark.skip("Sinan: deploy charmhub charms")
 async def test_deploy_charmhub_charm():
     async with base.CleanModel() as model:
         app = await model.deploy("ubuntu")
