@@ -28,10 +28,6 @@ from .. import base
 from ..utils import GB, INTEGRATION_TEST_DIR, MB, OVERLAYS_DIR, SSH_KEY, TESTS_DIR
 
 
-# Skip tests that create LXD containers - they will hang on VM-only LXD
-SKIP_CONTAINER_TESTS = os.environ.get('JUJU_VM_ONLY', '').lower() in ('1', 'true')
-
-
 @pytest.fixture
 def pylxd():
     return pytest.importorskip("pylxd")
@@ -539,9 +535,6 @@ async def test_deploy_noble():
 
 @base.bootstrapped
 async def test_add_machine():
-    if SKIP_CONTAINER_TESTS:
-        pytest.skip("Skipping container placement test (VM-only LXD mode)")
-    
     from juju.machine import Machine
 
     async with base.CleanModel() as model:
@@ -730,16 +723,12 @@ async def test_add_manual_machine_ssh(pylxd):
     Tests manual machine provisioning using a randomized username with
     sudo access.
     """
-    if SKIP_CONTAINER_TESTS:
-        pytest.skip("Skipping manual container provisioning test (VM-only LXD mode)")
     await add_manual_machine_ssh(pylxd, is_root=False)
 
 
 @base.bootstrapped
 async def test_add_manual_machine_ssh_root(pylxd):
     """Test manual machine provisioning with the root user."""
-    if SKIP_CONTAINER_TESTS:
-        pytest.skip("Skipping manual container provisioning test (VM-only LXD mode)")
     await add_manual_machine_ssh(pylxd, is_root=True)
 
 
